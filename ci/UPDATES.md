@@ -1,0 +1,7 @@
+# In-app updates / Nazzelha 0.5.2
+
+Settings → App updates → Check for updates. The private GitHub repository stays private. A user who can read this repository may configure a fine-grained, repository-scoped Contents: read-only token directly on their device; the app encrypts it in Android Keystore. No token is stored in source or sent to third-party hosts. The app checks at most daily when opened if enabled. It never installs without Android's confirmation.
+
+One-time signing setup: run ci/setup-update-signing.sh on a trusted computer with Java, OpenSSL and authenticated gh. Back up the key privately. Never replace it or commit it. CI publishes a GitHub Release with Nazzelha-arm64.apk and update.json only when persistent signing, signature checks and both emulator smoke tests succeed. Without the signing secrets, CI only produces debug test artifacts. Existing ephemeral-debug APKs cannot update to the new signing key; a one-time uninstall and install of the first signed release is necessary (app-private data may be lost). Keep versionCode increasing for future releases.
+
+The app checks package, strictly newer version, size, SHA-256 and matching signing certificates before handing a verified APK to Android's installer. Actual authenticated network/update installation must still be tested using a signed release; the smoke test covers startup and opening the updater/access dialog. Do not distribute a read token to other users.

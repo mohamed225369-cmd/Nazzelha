@@ -67,6 +67,14 @@ ui 'Load link' assert
 adb shell pidof "$PACKAGE" | tee "$OUT/startup-pid.txt"
 grep -Eq '[0-9]' "$OUT/startup-pid.txt"
 adb exec-out screencap -p > "$OUT/home.png"
+ui 'Settings' tap
+ui 'App updates' tap
+ui 'Check for updates' assert
+ui 'Check for updates' tap
+ui 'Private update access' assert
+adb exec-out screencap -p > "$OUT/update-access.png"
+adb shell input keyevent KEYCODE_BACK
+ui 'Load link' assert
 ui 'Downloads' tap
 ui 'Nothing queued yet.' assert
 adb exec-out screencap -p > "$OUT/downloads.png"
