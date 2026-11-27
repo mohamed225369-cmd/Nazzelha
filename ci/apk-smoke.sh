@@ -18,6 +18,11 @@ adb shell getprop > "$OUT/device-properties.txt"
 adb shell getprop ro.build.version.sdk
 adb shell getprop ro.product.cpu.abilist | tr -d '\r' | tee "$OUT/abi.txt"
 adb shell getconf PAGE_SIZE | tr -d '\r' | tee "$OUT/page-size.txt"
+EXPECTED_PAGE_SIZE="${3:-0}"
+if [[ "$EXPECTED_PAGE_SIZE" != 0 ]] && ! grep -qx "$EXPECTED_PAGE_SIZE" "$OUT/page-size.txt"; then
+  echo "Expected page size $EXPECTED_PAGE_SIZE; emulator reports $(cat "$OUT/page-size.txt")"
+  exit 1
+fi
 if ! grep -qw arm64-v8a "$OUT/abi.txt"; then
   echo "Emulator has no ARM64 ABI support; cannot validate this ARM64 APK."
   exit 1

@@ -87,9 +87,13 @@ jobs:
         include:
           - api: 35
             target: google_apis
-          - api: 37
+            label: api35-standard
+            expected_page_size: 0
+          - api: 35
             target: google_apis_ps16k
-    name: Install and launch (API ${{ matrix.api }})
+            label: api35-16kb
+            expected_page_size: 16384
+    name: Install and launch (${{ matrix.label }})
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -118,12 +122,12 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -no-snapshot -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: bash ci/apk-smoke.sh candidate/app-debug.apk diagnostics
+          script: bash ci/apk-smoke.sh candidate/app-debug.apk diagnostics ${{ matrix.expected_page_size }}
       - name: Upload diagnostic logs and screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-api-${{ matrix.api }}
+          name: smoke-${{ matrix.label }}
           path: diagnostics/
           if-no-files-found: warn
   publish-tested-apk:
