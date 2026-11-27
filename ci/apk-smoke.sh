@@ -75,6 +75,13 @@ ui 'No newer published version is available.' assert
 adb exec-out screencap -p > "$OUT/update-check.png"
 ui 'OK' tap
 ui 'Load link' assert
+ui 'Settings' tap
+ui 'Update yt-dlp' tap
+ui 'Engine update' assert
+ui 'Update now' assert
+adb exec-out screencap -p > "$OUT/engine-version.png"
+ui 'Close' tap
+ui 'Load link' assert
 ui 'Downloads' tap
 ui 'Nothing queued yet.' assert
 adb exec-out screencap -p > "$OUT/downloads.png"

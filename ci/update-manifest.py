@@ -15,6 +15,6 @@ if len(certs) != 1:
     raise SystemExit("Expected one verified APK signer")
 if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", m.group(3)):
     raise SystemExit("Unexpected release version")
-info = {"signerSha256": certs[0].lower(), "releaseNotes": "Startup stability fixes and direct, verified in-app updates.", "packageName": m.group(1), "versionCode": int(m.group(2)), "versionName": m.group(3), "size": apk.stat().st_size, "sha256": digest}
+info = {"signerSha256": certs[0].lower(), "releaseNotes": "Automatic yt-dlp update and one retry for compatible failures, verified manual engine updates, clearer error details.", "packageName": m.group(1), "versionCode": int(m.group(2)), "versionName": m.group(3), "size": apk.stat().st_size, "sha256": digest}
 (apk.parent / "update.json").write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(info))

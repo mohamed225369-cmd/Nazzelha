@@ -66,9 +66,18 @@ jobs:
           done
       - name: Install app updater source
         run: python3 ci/install-updater.py "${{ steps.project.outputs.dir }}"
-      - name: Assemble debug APK
+      - name: Install engine recovery overlay
+        run: python3 ci/install-engine.py "${{ steps.project.outputs.dir }}"
+      - name: Test recovery policy and assemble APK
         working-directory: ${{ steps.project.outputs.dir }}
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-unit-tests
+          path: ${{ steps.project.outputs.dir }}/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
       - name: Sign with persistent update key when configured
         id: sign
         shell: bash
