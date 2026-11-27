@@ -58,9 +58,15 @@ parents = {child: parent for parent in root.iter() for child in parent}
 nodes = [n for n in root.iter("node") if (re.search(label, n.get("text", "")) if action == "regex" else label.casefold() in (n.get("text", "").casefold(), n.get("content-desc", "").casefold()))]
 def target(n):
     while n is not None:
-        if n.get("clickable") == "true" and n.get("enabled") == "true":
-            return n
-        n = parents.get(n)
+        parent = parents.get(n)
+        if n.get("enabled") == "true":
+            # AlertDialog uses AdapterView item-click callbacks. Its visible
+            # rows and ListView can both report clickable=false.
+            if parent is not None and parent.get("class") == "android.widget.ListView" and parent.get("enabled") == "true":
+                return n
+            if n.get("clickable") == "true":
+                return n
+        n = parent
     return None
 if action == "selected":
     if not any(n.get("selected") == "true" or (target(n) is not None and target(n).get("selected") == "true") for n in nodes):
@@ -105,6 +111,8 @@ ui 'فيديو + صوت' selected
 adb exec-out screencap -p > "$OUT/home.png"
 navigate 'الإعدادات' 'تحديثات التطبيق'
 ui 'تحديثات التطبيق' tap
+ui 'البحث عن تحديث' assert
+adb exec-out screencap -p > "$OUT/update-menu.png"
 ui 'البحث عن تحديث' tap
 ui 'التطبيق محدّث' assert
 adb exec-out screencap -p > "$OUT/update-check.png"

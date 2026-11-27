@@ -107,6 +107,7 @@ s=replace(s,'setPadding(p, p, p, p); addView(label); addView(progress)','''setPa
             addView(label,LinearLayout.LayoutParams(-1,-2).apply{topMargin=Brand.dp(activity,16)})
             addView(progress,LinearLayout.LayoutParams(-1,Brand.dp(activity,8)).apply{topMargin=Brand.dp(activity,18)})''')
 s=s.replace('import android.widget.LinearLayout','import android.widget.LinearLayout\nimport android.widget.ImageView')
+s=s.replace('"App updates · "', '"تحديثات التطبيق · "').replace('if (store.automatic()) "On" else "Off"', 'if (store.automatic()) "مفعّل" else "متوقف"')
 s=s.replace('setMessage("The small update could not be applied. Download the full APK (" + sizeLabel(release.bytes) + ") instead?")','setMessage("تحميل التحديث الكامل · " + sizeLabel(release.bytes) + "؟")')
 p.write_text(s)
 print("Installed reviewed reference logo, launcher, splash and UI polish")
