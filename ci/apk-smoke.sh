@@ -83,9 +83,9 @@ ui 'OK' tap
 ui 'Load link' assert
 if [[ "$TEST_ABI" == x86_64 ]]; then
   ui 'Settings' tap
-  ui 'Update yt-dlp' tap
-  ui 'Engine update' assert
-  ui '^Installed yt-dlp: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
+  ui 'Download engine' tap
+  ui 'Download engine' assert
+  ui '^Version: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
   adb exec-out screencap -p > "$OUT/engine-version.png"
   ui 'Update now' tap
   ui '^(Previous version:|Installed version:)' regex 48
@@ -94,8 +94,8 @@ if [[ "$TEST_ABI" == x86_64 ]]; then
   ui 'OK' tap
   ui 'Load link' assert
   ui 'Settings' tap
-  ui 'Update yt-dlp' tap
-  ui '^Installed yt-dlp: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
+  ui 'Download engine' tap
+  ui '^Version: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
   cp "$OUT/ui.xml" "$OUT/engine-recheck.xml"
   ui 'Close' tap
   ui 'Load link' assert
@@ -105,7 +105,7 @@ else
   # child-process Python/FFmpeg binaries reliably. Native engine tests run
   # on the separately built x86_64 APK from identical Kotlin source.
   ui 'Settings' tap
-  ui 'Update yt-dlp' assert
+  ui 'Download engine' assert
   adb shell input keyevent KEYCODE_BACK
   ui 'Load link' assert
   echo "ARM64 exact-APK installation/UI test; engine execution verified in native x86_64 job, not via translation."
