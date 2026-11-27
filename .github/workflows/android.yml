@@ -110,12 +110,25 @@ jobs:
           grep -q "native-code: 'arm64-v8a'$" apk-info.txt
       - name: Generate update manifest from actual APK
         run: python3 ci/update-manifest.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" "$ANDROID_HOME/build-tools/35.0.0/aapt" "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+      - name: Prepare and verify small updates from published signed APKs
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 ci/prepare-deltas.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" "$RUNNER_TEMP/delta-fixtures" "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+      - name: Verify real patches using the Android app's Kotlin patch parser
+        if: steps.sign.outputs.signed == 'true'
+        working-directory: ${{ steps.project.outputs.dir }}
+        env:
+          NAZZELHA_DELTA_CASES: ${{ runner.temp }}/delta-fixtures/cases.tsv
+        run: gradle :app:testDebugUnitTest --tests com.clipshelf.app.ApkDeltaTest --rerun-tasks --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: Nazzelha-arm64-debug-candidate
           path: |
             ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
             ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/update.json
+            ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/delta-*.nzd.gz
           if-no-files-found: error
 
       - name: Assemble separate x86_64 engine-test APK
@@ -210,6 +223,7 @@ jobs:
           path: |
             tested/app-debug.apk
             tested/update.json
+            tested/delta-*.nzd.gz
           if-no-files-found: error
 
   release-update:
@@ -244,5 +258,8 @@ jobs:
             gh release download --repo "$GITHUB_REPOSITORY" --pattern update.json --dir previous
             python3 -c 'import json; a=json.load(open("previous/update.json")); b=json.load(open("update.json")); assert a["signerSha256"] == b["signerSha256"], "Signing certificate changed"; assert b["versionCode"] > a["versionCode"], "Version code must increase"'
           fi
-          gh release create "$TAG" Nazzelha-arm64.apk update.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Nazzelha $TAG" --generate-notes --draft
+          shopt -s nullglob
+          PATCHES=(delta-*.nzd.gz)
+          python3 -c 'import json, pathlib, hashlib; m=json.load(open("update.json")); ds=m.get("deltas",[]); assert {p.name for p in pathlib.Path(".").glob("delta-*.nzd.gz")} == {d["asset"] for d in ds}; assert all(pathlib.Path(d["asset"]).stat().st_size==d["size"] and hashlib.file_digest(open(d["asset"],"rb"),"sha256").hexdigest()==d["sha256"] for d in ds)'
+          gh release create "$TAG" Nazzelha-arm64.apk update.json "${PATCHES[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Nazzelha $TAG" --generate-notes --draft
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

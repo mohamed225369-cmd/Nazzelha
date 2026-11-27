@@ -15,6 +15,10 @@ def replace(path, old, new):
 
 updater = (here / "overlays/AppUpdater.kt").read_text(encoding="utf-8")
 (java / "AppUpdater.kt").write_text(updater, encoding="utf-8")
+(java / "ApkDelta.kt").write_text((here / "overlays/ApkDelta.kt").read_text(), encoding="utf-8")
+test = project / "app/src/test/java/com/clipshelf/app"
+test.mkdir(parents=True, exist_ok=True)
+(test / "ApkDeltaTest.kt").write_text((here / "tests/ApkDeltaTest.kt").read_text(), encoding="utf-8")
 main = java / "MainActivity.kt"
 replace(main, '    private val prefs by lazy { getSharedPreferences("appearance", MODE_PRIVATE) }',
     '    private val appUpdates by lazy { AppUpdateUi(this) }\n    private val prefs by lazy { getSharedPreferences("appearance", MODE_PRIVATE) }')
@@ -31,6 +35,6 @@ replace(manifest, '    <uses-permission android:name="android.permission.INTERNE
 replace(manifest, '        <service android:name=".DownloadService"',
     '        <provider android:name=".UpdateApkProvider" android:authorities="com.clipshelf.app.updates" android:exported="false" android:grantUriPermissions="true" />\n        <service android:name=".DownloadService"')
 gradle = project / "app/build.gradle.kts"
-replace(gradle, 'versionCode = 6', 'versionCode = 9')
-replace(gradle, 'versionName = "0.5.1"', 'versionName = "0.5.4"')
-print("Installed app updater overlay for 0.5.4")
+replace(gradle, 'versionCode = 6', 'versionCode = 10')
+replace(gradle, 'versionName = "0.5.1"', 'versionName = "0.5.5"')
+print("Installed app updater overlay for 0.5.5")

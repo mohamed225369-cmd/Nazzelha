@@ -50,7 +50,26 @@ private class UpdatePreferences(context: Context) {
 
 private class UpdateHttpError(val status: Int, message: String) : java.io.IOException(message)
 
-private data class UpdateRelease(val code: Long, val name: String, val notes: String, val asset: String, val bytes: Long, val hash: String)
+private data class UpdateDelta(val asset: String, val bytes: Long, val hash: String, val baseHash: String, val baseSize: Long)
+private data class UpdateRelease(val code: Long, val name: String, val notes: String, val asset: String, val bytes: Long, val hash: String, val delta: UpdateDelta? = null)
+private class DeltaFallback(message: String, cause: Throwable) : java.io.IOException(message, cause)
+
+private fun checkCanceled(cancelled: AtomicBoolean) {
+    if (cancelled.get() || Thread.currentThread().isInterrupted) throw InterruptedException("Canceled")
+}
+private fun fileHash(file: File, cancelled: AtomicBoolean = AtomicBoolean(false)): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            checkCanceled(cancelled)
+            val n = input.read(buf)
+            if (n < 0) break
+            digest.update(buf, 0, n)
+        }
+    }
+    return shaHex(digest.digest())
+}
 
 private object UpdateNetwork {
     private fun connection(address: String, accept: String): HttpsURLConnection {
@@ -96,7 +115,7 @@ private object UpdateNetwork {
             }
         } finally { conn.disconnect() }
     }
-    fun latest(current: Long): UpdateRelease? {
+    fun latest(context: Context, current: Long): UpdateRelease? {
         val meta = try { json(RELEASE_BASE + "/latest/download/update.json", "application/octet-stream") }
         catch (e: UpdateHttpError) { if (e.status == 404) return null else throw e }
         check(meta.getString("packageName") == "com.clipshelf.app") { "Incorrect update package." }
@@ -110,36 +129,87 @@ private object UpdateNetwork {
         check(bytes in 1..MAX_APK && hash.matches(Regex("[0-9a-f]{64}"))) { "Invalid APK metadata." }
         // Pin the APK to the manifest version, not the mutable latest alias.
         val address = RELEASE_BASE + "/download/v" + name + "/" + APK_NAME
-        return UpdateRelease(code, name, meta.optString("releaseNotes", "A new tested version is available.").take(1500), address, bytes, hash)
+        val delta = runCatching {
+            // Split/repacked APKs do not have a byte-identical base; use full updates.
+            val base = File(context.applicationInfo.sourceDir)
+            if (!context.applicationInfo.splitSourceDirs.isNullOrEmpty() || !base.isFile) null
+            else {
+                val entries = meta.optJSONArray("deltas")
+                val expectedName = "delta-$current-$code.nzd.gz"
+                var match: UpdateDelta? = null
+                if (entries != null && entries.length() <= 20) {
+                    for (i in 0 until entries.length()) {
+                        val d = entries.optJSONObject(i) ?: continue
+                        if (d.optLong("fromVersionCode") != current || d.optString("asset") != expectedName) continue
+                        val size = d.optLong("size")
+                        val baseSize = d.optLong("baseSize")
+                        val patchHash = d.optString("sha256").lowercase()
+                        val baseHash = d.optString("baseSha256").lowercase()
+                        if (size !in 1 until bytes || baseSize != base.length() ||
+                            !patchHash.matches(Regex("[0-9a-f]{64}")) || !baseHash.matches(Regex("[0-9a-f]{64}"))) continue
+                        if (fileHash(base) == baseHash) {
+                            match = UpdateDelta(RELEASE_BASE + "/download/v" + name + "/" + expectedName, size, patchHash, baseHash, baseSize)
+                            break
+                        }
+                    }
+                }
+                match
+            }
+        }.getOrNull()
+        return UpdateRelease(code, name, meta.optString("releaseNotes", "A new tested version is available.").take(1500), address, bytes, hash, delta)
     }
 
-    @Suppress("DEPRECATION")
-    fun download(context: Context, release: UpdateRelease, cancelled: AtomicBoolean, progress: (Int) -> Unit): File {
-        val finalFile = updateFile(context)
-        check(finalFile.parentFile!!.mkdirs() || finalFile.parentFile!!.isDirectory) { "Cannot create update folder." }
-        val part = File.createTempFile("download-", ".apk", finalFile.parentFile)
-        val conn = try { connection(release.asset, "application/octet-stream") } catch (e: Exception) { part.delete(); throw e }
+    private fun fetch(address: String, bytes: Long, hash: String, target: File,
+                      cancelled: AtomicBoolean, progress: (Int) -> Unit) {
+        val conn = connection(address, "application/octet-stream")
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var count = 0L
             var last = -1
             conn.inputStream.use { input ->
-                part.outputStream().use { output ->
+                target.outputStream().use { output ->
                     val buf = ByteArray(64 * 1024)
                     while (true) {
-                        if (cancelled.get() || Thread.currentThread().isInterrupted) throw InterruptedException()
+                        checkCanceled(cancelled)
                         val n = input.read(buf)
                         if (n < 0) break
                         count += n
-                        check(count <= release.bytes) { "APK exceeds expected size." }
+                        check(count <= bytes) { "Update exceeds expected size." }
                         digest.update(buf, 0, n)
                         output.write(buf, 0, n)
-                        val percent = (count * 100 / release.bytes).toInt().coerceAtMost(99)
+                        val percent = (count * 100 / bytes).toInt().coerceAtMost(99)
                         if (percent != last) { last = percent; progress(percent) }
                     }
                 }
             }
-            check(count == release.bytes && shaHex(digest.digest()) == release.hash) { "Downloaded APK failed integrity verification." }
+            check(count == bytes && shaHex(digest.digest()) == hash) { "Downloaded file failed integrity verification." }
+        } finally { conn.disconnect() }
+    }
+
+    @Suppress("DEPRECATION")
+    fun download(context: Context, release: UpdateRelease, cancelled: AtomicBoolean, progress: (Int) -> Unit): File {
+        val finalFile = updateFile(context)
+        val directory = finalFile.parentFile!!
+        check(directory.mkdirs() || directory.isDirectory) { "Cannot create update folder." }
+        val part = File.createTempFile("download-", ".apk", directory)
+        try {
+            val delta = release.delta
+            if (delta == null) {
+                fetch(release.asset, release.bytes, release.hash, part, cancelled, progress)
+            } else {
+                val patch = File.createTempFile("delta-", ".gz", directory)
+                try {
+                    val base = File(context.applicationInfo.sourceDir)
+                    check(base.length() == delta.baseSize && fileHash(base, cancelled) == delta.baseHash) { "Installed APK differs from the patch base." }
+                    fetch(delta.asset, delta.bytes, delta.hash, patch, cancelled) { progress(it * 90 / 100) }
+                    ApkDelta.apply(base, patch, part, release.bytes, { cancelled.get() }) { progress(90 + it * 9 / 100) }
+                    check(part.length() == release.bytes && fileHash(part, cancelled) == release.hash) { "Reconstructed APK failed integrity verification." }
+                } catch (e: Exception) {
+                    checkCanceled(cancelled)
+                    if (e is InterruptedException) throw e
+                    throw DeltaFallback("Small update could not be applied. " + (e.message ?: ""), e)
+                } finally { patch.delete() }
+            }
             val pm = context.packageManager
             val flags = PackageManager.GET_SIGNING_CERTIFICATES
             val current = pm.getPackageInfo(context.packageName, flags)
@@ -151,11 +221,11 @@ private object UpdateNetwork {
             check(installed.isNotEmpty() && installed == certs(next)) {
                 "This APK has a different signing key. It cannot update the installed version."
             }
-            if (cancelled.get()) throw InterruptedException()
+            checkCanceled(cancelled)
             check(part.renameTo(finalFile)) { "Could not finalize the update." }
             progress(100)
             return finalFile
-        } finally { conn.disconnect(); part.delete() }
+        } finally { part.delete() }
     }
 }
 
@@ -224,18 +294,20 @@ class AppUpdateUi(private val activity: Activity) {
         if (manual) dialog = AlertDialog.Builder(activity).setTitle("Checking for updates…")
             .setView(ProgressBar(activity)).setCancelable(false).create().apply { show() }
         work.execute {
-            val result = runCatching { UpdateNetwork.latest(current) }
+            val result = runCatching { UpdateNetwork.latest(activity.applicationContext, current) }
             main {
                 busy = false; dialog?.dismiss(); dialog = null
                 result.onSuccess { release ->
                     if (release == null) { if (manual) notice("No newer published version is available.") }
                     else AlertDialog.Builder(activity).setTitle("Update available · " + release.name)
-                        .setMessage("Download: " + "%.1f".format(release.bytes / (1024.0 * 1024)) + " MB\n\n" + release.notes)
+                        .setMessage(if (release.delta == null) "Full update: " + sizeLabel(release.bytes) + "\n\n" + release.notes
+                            else "Small update: " + sizeLabel(release.delta.bytes) + " (full APK: " + sizeLabel(release.bytes) + ")\nOnly changed data is downloaded.\n\n" + release.notes)
                         .setNegativeButton("Later", null).setPositiveButton("Download") { _, _ -> download(release) }.show()
                 }.onFailure { if (manual) notice(it.message?.take(240) ?: "Could not check for updates.") }
             }
         }
     }
+    private fun sizeLabel(bytes: Long) = if (bytes < 1024 * 1024) "%.0f KB".format(bytes / 1024.0) else "%.1f MB".format(bytes / (1024.0 * 1024))
     private fun download(release: UpdateRelease) {
         if (busy || !alive()) return
         busy = true; cancel = AtomicBoolean(false)
@@ -251,7 +323,7 @@ class AppUpdateUi(private val activity: Activity) {
             .setCancelable(false).setNegativeButton("Cancel") { _, _ -> signal.set(true) }.create().apply { show() }
         work.execute {
             val result = runCatching { UpdateNetwork.download(activity.applicationContext, release, signal) { p ->
-                main { progress.progress = p; label.text = "Downloading update · " + p + "%" }
+                main { progress.progress = p; label.text = (if (release.delta != null && p >= 90) "Applying update · " else "Downloading update · ") + p + "%" }
             } }
             main {
                 busy = false; dialog?.dismiss(); dialog = null
@@ -259,7 +331,13 @@ class AppUpdateUi(private val activity: Activity) {
                     AlertDialog.Builder(activity).setTitle("Update verified")
                         .setMessage("Android will ask you to confirm installation.").setNegativeButton("Later", null)
                         .setPositiveButton("Install") { _, _ -> install() }.show()
-                }.onFailure { notice(it.message?.take(240) ?: "Update download failed.") }
+                }.onFailure {
+                    if (it is DeltaFallback) AlertDialog.Builder(activity).setTitle("Full update needed")
+                        .setMessage("The small update could not be applied. Download the full APK (" + sizeLabel(release.bytes) + ") instead?")
+                        .setNegativeButton("Later", null)
+                        .setPositiveButton("Download full APK") { _, _ -> download(release.copy(delta = null)) }.show()
+                    else notice(it.message?.take(240) ?: "Update download failed.")
+                }
             }
         }
     }

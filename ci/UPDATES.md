@@ -1,4 +1,4 @@
-# In-app updates / Nazzelha 0.5.4
+# In-app updates / Nazzelha 0.5.5
 
 The repository and GitHub Releases are public. No token, account or backend is needed in the Android app. Settings → App updates → Check for updates downloads the public latest release manifest directly (without the anonymous REST API rate limit), then uses its version-specific APK URL. Automatic checks can be enabled and run at most daily when opening the app. Android asks the user to confirm installation.
 
@@ -11,3 +11,6 @@ Settings → Update yt-dlp displays the real installed version and offers Update
 
 ## ABI-correct CI checks
 The distributed APK remains ARM64. Its exact signed file must install and pass UI smoke tests in the standard and 16 KB Android 15 images. An additional APK built from identical sources with the x86_64 native libraries is exclusively a CI test artifact: it must execute yt-dlp, perform the real stable engine update check/install, and read the installed version again. This avoids ARM-to-x86 native-bridge linker failures. All three jobs must pass before publishing the ARM64 release. This does not establish a successful live YouTube transfer or native ARM64 engine execution on a real device.
+
+## Differential APK updates
+Starting with v0.5.5, the app chooses a small signed-APK delta if the installed base APK's version, byte size and SHA-256 exactly match a manifest entry. CI creates bounded NZD1 copy/literal patches from up to three prior public signed releases, verifies the reconstructed file's SHA-256 and signature, and runs the same Kotlin parser used on Android against the real APKs. Native runtime files (lib/) are fingerprinted; if they change or a delta is at least 70% of the full APK, no delta is published for that base. If the installed APK was repacked, is split, is too old, or no usable delta exists, the UI offers the full APK. If a chosen delta fails, the user must explicitly approve the full download. Android still installs the entire reconstructed signed APK locally using the original package identity and certificate; only the network transfer is smaller. v0.5.4 and earlier need one full update to gain delta support. The yt-dlp self-update stays separate. No additional runtime dependency is used.
