@@ -1,0 +1,11 @@
+--- a/app/src/main/java/com/clipshelf/app/MainActivity.kt
++++ b/app/src/main/java/com/clipshelf/app/MainActivity.kt
+@@ -126,7 +126,7 @@
+             window.decorView.systemUiVisibility = if (darkMode) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+         }
+         window.statusBarColor = background; window.navigationBarColor = background
+-        root = column(0).apply { setBackgroundColor(background); setPadding(dp(20), dp(8), dp(20), dp(6)) }
++        root = column(0).apply { setBackgroundColor(this@MainActivity.background); setPadding(dp(20), dp(8), dp(20), dp(6)) }
+         if (Build.VERSION.SDK_INT >= 30) {
+             window.setDecorFitsSystemWindows(false)
+             root.setOnApplyWindowInsetsListener { view, insets ->

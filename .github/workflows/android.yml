@@ -10,6 +10,7 @@ on:
       - 'settings.gradle.kts'
       - 'gradle.properties'
       - '.github/workflows/android.yml'
+      - 'patches/**'
 permissions:
   contents: read
 jobs:
@@ -51,6 +52,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Apply source fixes
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: patch --batch --forward -p1 < "$GITHUB_WORKSPACE/patches/0001-resolve-background-color.patch"
       - name: Assemble debug APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: gradle :app:assembleDebug --stacktrace
