@@ -35,6 +35,6 @@ replace(manifest, '    <uses-permission android:name="android.permission.INTERNE
 replace(manifest, '        <service android:name=".DownloadService"',
     '        <provider android:name=".UpdateApkProvider" android:authorities="com.clipshelf.app.updates" android:exported="false" android:grantUriPermissions="true" />\n        <service android:name=".DownloadService"')
 gradle = project / "app/build.gradle.kts"
-replace(gradle, 'versionCode = 6', 'versionCode = 11')
-replace(gradle, 'versionName = "0.5.1"', 'versionName = "0.5.6"')
-print("Installed app updater overlay for 0.5.6")
+replace(gradle, 'versionCode = 6', 'versionCode = 12')
+replace(gradle, 'versionName = "0.5.1"', 'versionName = "0.5.7"')
+print("Installed app updater overlay for 0.5.7")

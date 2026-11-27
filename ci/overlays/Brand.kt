@@ -9,6 +9,11 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.View
+import android.view.Gravity
+import android.view.WindowManager
+import android.graphics.drawable.LayerDrawable
+import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.Button
 import android.widget.TextView
 
@@ -39,6 +44,8 @@ internal object Brand {
                 "refresh" -> { c.drawArc(4f,4f,20f,20f,-40f,285f,false,paint);path(20f,3f,20f,9f,14f,9f) }
                 "close" -> { path(6f,6f,18f,18f);path(18f,6f,6f,18f) }
                 "check" -> path(5f,12f,10f,17f,20f,7f)
+                "warning" -> { path(12f,3f,22f,20f,2f,20f,12f,3f); path(12f,9f,12f,13.5f);c.drawPoint(12f,17f,paint) }
+                "back" -> { path(19f,12f,5f,12f);path(11f,5f,4f,12f,11f,19f) }
                 "play" -> path(8f,4f,20f,12f,8f,20f,8f,4f)
                 "info" -> { c.drawCircle(12f,12f,9f,paint);path(12f,11f,12f,17f);c.drawPoint(12f,7f,paint) }
                 "arrow" -> path(9f,5f,16f,12f,9f,19f)
@@ -89,17 +96,54 @@ internal object Brand {
         text == "Error details" -> "info"
         else -> null
     }
+    fun badge(context: Context, name: String, color: Int, size: Int = 54): Drawable {
+        val pad=dp(context,(size-29)/2)
+        return LayerDrawable(arrayOf(surface(context,(color and 0x00FFFFFF) or 0x26000000,17),icon(context,name,color,29))).apply {
+            setLayerInset(1,pad,pad,pad,pad); setBounds(0,0,dp(context,size),dp(context,size))
+        }
+    }
+    fun emptyState(context: Context, name: String, title: String): View {
+        val p=palette(context)
+        return LinearLayout(context).apply {
+            orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER
+            setPadding(dp(context,16),dp(context,20),dp(context,16),dp(context,20))
+            addView(ImageView(context).apply { setImageDrawable(badge(context,name,p.accent,68));contentDescription=null },LinearLayout.LayoutParams(dp(context,68),dp(context,68)))
+            addView(TextView(context).apply { text=title; textSize=17f; setTextColor(p.ink); typeface=Typeface.create("sans-serif-medium",0);gravity=Gravity.CENTER },LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(context,15)})
+        }
+    }
     fun styleDialog(dialog: AlertDialog) {
         val p=palette(dialog.context)
         dialog.window?.setBackgroundDrawable(surface(dialog.context,p.panel,24,p.line))
-        dialog.window?.setDimAmount(.62f)
+        dialog.window?.setDimAmount(.68f)
+        dialog.window?.setLayout(minOf(dialog.context.resources.displayMetrics.widthPixels-dp(dialog.context,36),dp(dialog.context,420)),WindowManager.LayoutParams.WRAP_CONTENT)
+        val titleId=dialog.context.resources.getIdentifier("alertTitle","id","android")
+        val heading=if(titleId!=0)dialog.findViewById<TextView>(titleId) else null
+        val body=dialog.findViewById<TextView>(android.R.id.message)
+        heading?.apply { setTextColor(p.ink);textSize=20f; typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
+        if(dialog.listView==null && body!=null && heading!=null && body.visibility==View.VISIBLE) {
+            val combined=heading.text.toString()+" "+body.text.toString()
+            val kind=when {
+                combined.contains("فشل") || combined.contains("تعذر") -> "warning"
+                combined.contains("محدّث") || combined.contains("تم تنزيل") || combined.contains("اكتمل") -> "check"
+                combined.contains("تحديث") -> "refresh"
+                combined.contains("التحميل") -> "download"
+                else -> "info"
+            }
+            val tint=when(kind){"check"->p.green;"warning"->p.red;else->p.accent}
+            heading.gravity=Gravity.CENTER
+            heading.setCompoundDrawables(null,badge(dialog.context,kind,tint),null,null)
+            heading.compoundDrawablePadding=dp(dialog.context,12)
+            heading.setPadding(heading.paddingLeft,dp(dialog.context,12),heading.paddingRight,dp(dialog.context,6))
+            body.gravity=Gravity.CENTER
+            body.setLineSpacing(dp(dialog.context,3).toFloat(),1f)
+        }
         for (id in listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)) {
             dialog.getButton(id)?.apply {
                 isAllCaps=false
                 typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
                 setTextColor(if(id==AlertDialog.BUTTON_POSITIVE)p.onAccent else p.ink)
-                background=RippleDrawable(ColorStateList.valueOf(0x22000000),surface(context,if(id==AlertDialog.BUTTON_POSITIVE)p.accent else p.panel2,14),null)
-                minHeight=dp(context,44)
+                background=RippleDrawable(ColorStateList.valueOf(0x22000000),if(id==AlertDialog.BUTTON_POSITIVE)primary(context,p,14) else surface(context,p.panel2,14,p.line),null)
+                minHeight=dp(context,48); minimumHeight=dp(context,48); minimumWidth=dp(context,72); setPadding(dp(context,10),dp(context,8),dp(context,10),dp(context,8))
             }
         }
         dialog.listView?.apply { divider=null; dividerHeight=0 }

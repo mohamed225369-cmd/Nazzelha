@@ -20,3 +20,6 @@ Native Android UI refresh retains the existing language, workflow and palette, w
 
 ## Approved reference UI (0.5.6)
 Arabic native home, wave artwork, three functional media choices, four bottom navigation destinations, real MediaStore files, compact settings and radio quality rows, shared branded dialogs and loading. Screenshot artifacts are captured for actual Android home, settings, files, downloads and both themes. The concept's premium crown and pause/resume were not implemented because the current engine does not support those features. No sample downloads are inserted in production. Visual parity must be checked against actual device screenshots before claiming pixel-identical fidelity.
+
+## Reviewed visual polish (0.5.7)
+The logo is redrawn from the approved coral triangular N mark as a gradient vector, with matching adaptive launcher and Android splash. Empty screens have graphical empty states rather than redundant back buttons. Home transfer cards retain their view across progress updates. Standard dialogs share status icons, typography and button styling; update progress uses the same coral accents. UI smoke tests resolve clickable ancestors and test media-mode selection, navigation, engine update and theme switching. The 0.5.6 screenshots were reviewed; the new build still needs screenshot and runtime verification.

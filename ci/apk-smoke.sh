@@ -53,11 +53,24 @@ ui() {
       if python3 - "$OUT/ui.xml" "$label" "$action" <<'PY'
 import re, subprocess, sys, xml.etree.ElementTree as ET
 path, label, action = sys.argv[1:]
-nodes = [n for n in ET.parse(path).iter("node") if (re.search(label, n.get("text", "")) if action == "regex" else n.get("text", "").casefold() == label.casefold())]
+root = ET.parse(path).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+nodes = [n for n in root.iter("node") if (re.search(label, n.get("text", "")) if action == "regex" else label.casefold() in (n.get("text", "").casefold(), n.get("content-desc", "").casefold()))]
+def target(n):
+    while n is not None:
+        if n.get("clickable") == "true" and n.get("enabled") == "true":
+            return n
+        n = parents.get(n)
+    return None
+if action == "selected":
+    if not any(n.get("selected") == "true" or (target(n) is not None and target(n).get("selected") == "true") for n in nodes):
+        sys.exit(1)
 if not nodes:
     sys.exit(1)
 if action == "tap":
-    node = next((n for n in nodes if n.get("clickable") == "true"), nodes[0])
+    node = next((target(n) for n in nodes if target(n) is not None), None)
+    if node is None:
+        sys.exit(1)
     x1,y1,x2,y2 = map(int,re.findall(r"\d+",node.get("bounds","")))
     subprocess.run(["adb","shell","input","tap",str((x1+x2)//2),str((y1+y2)//2)],check=True)
 PY
@@ -69,14 +82,28 @@ PY
   return 1
 }
 
+navigate() {
+  local button="$1" destination="$2"
+  for attempt in $(seq 1 3); do
+    if ui "$destination" assert 1; then return 0; fi
+    ui "$button" tap
+    if ui "$destination" assert 4; then return 0; fi
+  done
+  echo "Navigation failed: $button -> $destination"
+  return 1
+}
 ui 'تحميل' assert
 adb shell pidof "$PACKAGE" | tee "$OUT/startup-pid.txt"
 grep -Eq '[0-9]' "$OUT/startup-pid.txt"
 ui 'فيديو + صوت' assert
-ui 'فيديو' assert
-ui 'صوت' assert
+ui 'فيديو' tap
+ui 'فيديو' selected
+ui 'صوت' tap
+ui 'صوت' selected
+ui 'فيديو + صوت' tap
+ui 'فيديو + صوت' selected
 adb exec-out screencap -p > "$OUT/home.png"
-ui 'الإعدادات' tap
+navigate 'الإعدادات' 'تحديثات التطبيق'
 ui 'تحديثات التطبيق' tap
 ui 'البحث عن تحديث' tap
 ui 'التطبيق محدّث' assert
@@ -97,25 +124,21 @@ if [[ "$TEST_ABI" == x86_64 ]]; then
   echo "PASS: native engine version and update."
 fi
 adb exec-out screencap -p > "$OUT/settings.png"
-ui 'الملفات' tap
-ui 'لا توجد ملفات محفوظة' assert
+navigate 'الملفات' 'لا توجد ملفات محفوظة'
 adb exec-out screencap -p > "$OUT/files.png"
-ui 'التحميلات' tap
-ui 'لا توجد تحميلات' assert
+navigate 'التحميلات' 'لا توجد تحميلات'
 adb exec-out screencap -p > "$OUT/downloads.png"
-ui 'الإعدادات' tap
+navigate 'الإعدادات' 'المظهر'
 ui 'المظهر' tap
 ui 'فاتح' tap
 ui 'تحديثات التطبيق' assert
-ui 'الرئيسية' tap
-ui 'تحميل' assert
+navigate 'الرئيسية' 'تحميل'
 adb exec-out screencap -p > "$OUT/light.png"
-ui 'الإعدادات' tap
+navigate 'الإعدادات' 'المظهر'
 ui 'المظهر' tap
 ui 'داكن' tap
 ui 'تحديثات التطبيق' assert
-ui 'الرئيسية' tap
-ui 'تحميل' assert
+navigate 'الرئيسية' 'تحميل'
 adb exec-out screencap -p > "$OUT/dark.png"
 adb shell am force-stop "$PACKAGE"
 adb shell am start -W -n "$PACKAGE/.MainActivity" | tee "$OUT/relaunch.txt"
