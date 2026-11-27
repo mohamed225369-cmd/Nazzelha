@@ -25,8 +25,14 @@ if [[ "$EXPECTED_PAGE_SIZE" != 0 ]] && ! grep -qx "$EXPECTED_PAGE_SIZE" "$OUT/pa
   echo "Expected page size $EXPECTED_PAGE_SIZE; emulator reports $(cat "$OUT/page-size.txt")"
   exit 1
 fi
-if ! grep -qw arm64-v8a "$OUT/abi.txt"; then
-  echo "Emulator has no ARM64 ABI support; cannot validate this ARM64 APK."
+TEST_ABI="${4:-arm64-v8a}"
+if ! grep -qw "$TEST_ABI" "$OUT/abi.txt"; then
+  echo "Emulator does not support requested ABI: $TEST_ABI"
+  exit 1
+fi
+PRIMARY_ABI="$(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+if [[ "$TEST_ABI" == x86_64 && "$PRIMARY_ABI" != x86_64 ]]; then
+  echo "Engine test requires native x86_64 execution."
   exit 1
 fi
 adb shell input keyevent KEYCODE_WAKEUP
@@ -47,7 +53,7 @@ ui() {
       if python3 - "$OUT/ui.xml" "$label" "$action" <<'PY'
 import re, subprocess, sys, xml.etree.ElementTree as ET
 path, label, action = sys.argv[1:]
-nodes = [n for n in ET.parse(path).iter("node") if n.get("text") == label]
+nodes = [n for n in ET.parse(path).iter("node") if (re.search(label, n.get("text", "")) if action == "regex" else n.get("text", "").casefold() == label.casefold())]
 if not nodes:
     sys.exit(1)
 if action == "tap":
@@ -75,13 +81,35 @@ ui 'No newer published version is available.' assert
 adb exec-out screencap -p > "$OUT/update-check.png"
 ui 'OK' tap
 ui 'Load link' assert
-ui 'Settings' tap
-ui 'Update yt-dlp' tap
-ui 'Engine update' assert
-ui 'Update now' assert
-adb exec-out screencap -p > "$OUT/engine-version.png"
-ui 'Close' tap
-ui 'Load link' assert
+if [[ "$TEST_ABI" == x86_64 ]]; then
+  ui 'Settings' tap
+  ui 'Update yt-dlp' tap
+  ui 'Engine update' assert
+  ui '^Installed yt-dlp: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
+  adb exec-out screencap -p > "$OUT/engine-version.png"
+  ui 'Update now' tap
+  ui '^(Previous version:|Installed version:)' regex
+  adb exec-out screencap -p > "$OUT/engine-updated.png"
+  cp "$OUT/ui.xml" "$OUT/engine-result.xml"
+  ui 'OK' tap
+  ui 'Load link' assert
+  ui 'Settings' tap
+  ui 'Update yt-dlp' tap
+  ui '^Installed yt-dlp: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
+  cp "$OUT/ui.xml" "$OUT/engine-recheck.xml"
+  ui 'Close' tap
+  ui 'Load link' assert
+  echo "PASS: native x86_64 yt-dlp version, official stable update check/install and post-update version check."
+else
+  # The public APK is ARM64; x86 Android native-bridge cannot execute its
+  # child-process Python/FFmpeg binaries reliably. Native engine tests run
+  # on the separately built x86_64 APK from identical Kotlin source.
+  ui 'Settings' tap
+  ui 'Update yt-dlp' assert
+  adb shell input keyevent KEYCODE_BACK
+  ui 'Load link' assert
+  echo "ARM64 exact-APK installation/UI test; engine execution verified in native x86_64 job, not via translation."
+fi
 ui 'Downloads' tap
 ui 'Nothing queued yet.' assert
 adb exec-out screencap -p > "$OUT/downloads.png"

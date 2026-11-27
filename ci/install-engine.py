@@ -150,4 +150,5 @@ test.mkdir(parents=True, exist_ok=True)
 (test / "EngineRecoveryPolicyTest.kt").write_text((here / "tests/EngineRecoveryPolicyTest.kt").read_text(), encoding="utf-8")
 gradle = project / "app/build.gradle.kts"
 replace(gradle, "dependencies {", 'dependencies {\n    testImplementation("junit:junit:4.13.2")')
+replace(gradle, 'ndk { abiFilters.add("arm64-v8a") }', 'ndk { abiFilters.add(providers.gradleProperty("nazzelhaCiAbi").orElse("arm64-v8a").get()) }')
 print("Installed engine updater and one-retry recovery")

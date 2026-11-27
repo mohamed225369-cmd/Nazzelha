@@ -107,7 +107,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-info.txt
           grep -q "package: name='com.clipshelf.app'" apk-info.txt
-          grep -q "arm64-v8a" apk-info.txt
+          grep -q "native-code: 'arm64-v8a'$" apk-info.txt
       - name: Generate update manifest from actual APK
         run: python3 ci/update-manifest.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" "$ANDROID_HOME/build-tools/35.0.0/aapt" "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - uses: actions/upload-artifact@v4
@@ -116,6 +116,20 @@ jobs:
           path: |
             ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
             ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/update.json
+          if-no-files-found: error
+
+      - name: Assemble separate x86_64 engine-test APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          gradle :app:assembleDebug -PnazzelhaCiAbi=x86_64 --stacktrace
+          mkdir -p "$RUNNER_TEMP/native-engine"
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "native-code: 'x86_64'$"
+          cp "$APK" "$RUNNER_TEMP/native-engine/app-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nazzelha-x86_64-engine-test-only
+          path: ${{ runner.temp }}/native-engine/app-debug.apk
           if-no-files-found: error
 
   install-smoke:
@@ -130,10 +144,20 @@ jobs:
             target: google_apis
             label: api35-standard
             expected_page_size: 0
+            abi: arm64-v8a
+            artifact: Nazzelha-arm64-debug-candidate
           - api: 35
             target: google_apis_ps16k
             label: api35-16kb
             expected_page_size: 16384
+            abi: arm64-v8a
+            artifact: Nazzelha-arm64-debug-candidate
+          - api: 35
+            target: google_apis
+            label: api35-native-engine
+            expected_page_size: 0
+            abi: x86_64
+            artifact: Nazzelha-x86_64-engine-test-only
     name: Install and launch (${{ matrix.label }})
     steps:
       - uses: actions/checkout@v4
@@ -143,7 +167,7 @@ jobs:
           java-version: '17'
       - uses: actions/download-artifact@v4
         with:
-          name: Nazzelha-arm64-debug-candidate
+          name: ${{ matrix.artifact }}
           path: candidate
       - name: Enable emulator acceleration
         run: |
@@ -151,7 +175,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
-      - name: Install and run exact ARM64 APK
+      - name: Install and run APK for ${{ matrix.abi }}
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: ${{ matrix.api }}
@@ -163,7 +187,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -cores 2 -no-window -no-snapshot -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: bash ci/apk-smoke.sh candidate/app-debug.apk diagnostics ${{ matrix.expected_page_size }}
+          script: bash ci/apk-smoke.sh candidate/app-debug.apk diagnostics ${{ matrix.expected_page_size }} ${{ matrix.abi }}
       - name: Upload diagnostic logs and screenshots
         if: always()
         uses: actions/upload-artifact@v4
