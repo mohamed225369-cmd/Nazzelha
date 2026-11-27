@@ -47,7 +47,7 @@ grep -Eq '^Status:[[:space:]]+ok' "$OUT/launch.txt"
 
 ui() {
   local label="$1" action="$2"
-  for attempt in $(seq 1 12); do
+  for attempt in $(seq 1 "${3:-12}"); do
     if adb shell uiautomator dump /sdcard/nazzelha-ui.xml >/dev/null 2>&1 &&
        adb pull /sdcard/nazzelha-ui.xml "$OUT/ui.xml" >/dev/null 2>&1; then
       if python3 - "$OUT/ui.xml" "$label" "$action" <<'PY'
@@ -88,7 +88,7 @@ if [[ "$TEST_ABI" == x86_64 ]]; then
   ui '^Installed yt-dlp: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
   adb exec-out screencap -p > "$OUT/engine-version.png"
   ui 'Update now' tap
-  ui '^(Previous version:|Installed version:)' regex
+  ui '^(Previous version:|Installed version:)' regex 48
   adb exec-out screencap -p > "$OUT/engine-updated.png"
   cp "$OUT/ui.xml" "$OUT/engine-result.xml"
   ui 'OK' tap
