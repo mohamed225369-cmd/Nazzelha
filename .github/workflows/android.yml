@@ -58,7 +58,10 @@ jobs:
       - name: Apply source fixes
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
-        run: patch --batch --forward -p1 < "$GITHUB_WORKSPACE/patches/0001-resolve-background-color.patch"
+        run: |
+          for fix in "$GITHUB_WORKSPACE"/patches/*.patch; do
+            patch --batch --forward -p1 < "$fix"
+          done
       - name: Assemble debug APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: gradle :app:assembleDebug --stacktrace

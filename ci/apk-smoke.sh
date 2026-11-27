@@ -7,6 +7,8 @@ mkdir -p "$OUT"
 
 capture() {
   adb logcat -d -v threadtime > "$OUT/logcat.txt" 2>&1 || true
+  adb logcat -d -b crash > "$OUT/crash.txt" 2>&1 || true
+  cat "$OUT/crash.txt" || true
   adb shell dumpsys package "$PACKAGE" > "$OUT/package.txt" 2>&1 || true
   adb shell dumpsys activity activities > "$OUT/activities.txt" 2>&1 || true
   adb exec-out screencap -p > "$OUT/final-screen.png" 2>/dev/null || true
@@ -62,6 +64,8 @@ PY
 }
 
 ui 'Load link' assert
+adb shell pidof "$PACKAGE" | tee "$OUT/startup-pid.txt"
+grep -Eq '[0-9]' "$OUT/startup-pid.txt"
 adb exec-out screencap -p > "$OUT/home.png"
 ui 'Downloads' tap
 ui 'Nothing queued yet.' assert
@@ -78,6 +82,11 @@ ui 'Appearance · Light' tap
 ui 'Dark' tap
 ui 'Load link' assert
 adb exec-out screencap -p > "$OUT/dark.png"
+adb shell am force-stop "$PACKAGE"
+adb shell am start -W -n "$PACKAGE/.MainActivity" | tee "$OUT/relaunch.txt"
+grep -Eq '^Status:[[:space:]]+ok' "$OUT/relaunch.txt"
+ui 'Load link' assert
+adb exec-out screencap -p > "$OUT/relaunch.png"
 adb shell pidof "$PACKAGE" | tee "$OUT/pid.txt"
 grep -Eq '[0-9]' "$OUT/pid.txt"
 adb logcat -d -b crash > "$OUT/crash.txt"

@@ -1,0 +1,50 @@
+--- a/app/src/main/java/com/clipshelf/app/MainActivity.kt
++++ b/app/src/main/java/com/clipshelf/app/MainActivity.kt
+@@ -118,13 +118,8 @@
+         palette = if (darkMode) NazzelhaColors.dark else NazzelhaColors.light
+         setTheme(if (darkMode) R.style.AppTheme else R.style.AppTheme_Light)
+         super.onCreate(savedInstanceState)
+-        if (Build.VERSION.SDK_INT >= 30) {
+-            val flags = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+-            window.insetsController?.setSystemBarsAppearance(if (darkMode) 0 else flags, flags)
+-        } else {
+-            @Suppress("DEPRECATION")
+-            window.decorView.systemUiVisibility = if (darkMode) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+-        }
++        // Initialize the decor before using any window APIs.
++        val decor = window.decorView
+         window.statusBarColor = background; window.navigationBarColor = background
+         root = column(0).apply { setBackgroundColor(this@MainActivity.background); setPadding(dp(20), dp(8), dp(20), dp(6)) }
+         if (Build.VERSION.SDK_INT >= 30) {
+@@ -147,6 +142,18 @@
+         root.addView(rule(), lp(-1, 1, 8))
+         tabs = row(); root.addView(tabs, lp(-1, 56, 4))
+         setContentView(root)
++        if (Build.VERSION.SDK_INT >= 30) {
++            root.post {
++                if (!isDestroyed && root.isAttachedToWindow) {
++                    val flags = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
++                    root.windowInsetsController?.setSystemBarsAppearance(if (darkMode) 0 else flags, flags)
++                    root.requestApplyInsets()
++                }
++            }
++        } else {
++            @Suppress("DEPRECATION")
++            decor.systemUiVisibility = if (darkMode) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
++        }
+         if (savedInstanceState == null) handleShare(intent)
+         QueueStore.listen(queueListener)
+         showTab(Workspace.tab)
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -5,8 +5,8 @@
+         applicationId = "com.clipshelf.app"
+         minSdk = 29
+         targetSdk = 35
+-        versionCode = 5
+-        versionName = "0.5.0"
++        versionCode = 6
++        versionName = "0.5.1"
+         ndk { abiFilters.add("arm64-v8a") }
+     }
+     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
