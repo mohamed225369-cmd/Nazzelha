@@ -100,7 +100,7 @@ jobs:
           grep -q "package: name='com.clipshelf.app'" apk-info.txt
           grep -q "arm64-v8a" apk-info.txt
       - name: Generate update manifest from actual APK
-        run: python3 ci/update-manifest.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" "$ANDROID_HOME/build-tools/35.0.0/aapt"
+        run: python3 ci/update-manifest.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" "$ANDROID_HOME/build-tools/35.0.0/aapt" "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - uses: actions/upload-artifact@v4
         with:
           name: Nazzelha-arm64-debug-candidate
@@ -205,4 +205,11 @@ jobs:
             echo "Release already exists. Bump the app version before publishing another update."
             exit 1
           fi
-          gh release create "$TAG" Nazzelha-arm64.apk update.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Nazzelha $TAG" --generate-notes --latest
+          # Compare with the previous published signer before creating a release.
+          if gh release view --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            mkdir -p previous
+            gh release download --repo "$GITHUB_REPOSITORY" --pattern update.json --dir previous
+            python3 -c 'import json; a=json.load(open("previous/update.json")); b=json.load(open("update.json")); assert a["signerSha256"] == b["signerSha256"], "Signing certificate changed"; assert b["versionCode"] > a["versionCode"], "Version code must increase"'
+          fi
+          gh release create "$TAG" Nazzelha-arm64.apk update.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Nazzelha $TAG" --generate-notes --draft
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

@@ -27,7 +27,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val UPDATE_REPO = "mohamed225369-cmd/Nazzelha"
-private const val UPDATE_API = "https://api.github.com/repos/" + UPDATE_REPO
+private const val RELEASE_BASE = "https://github.com/" + UPDATE_REPO + "/releases"
 private const val APK_NAME = "Nazzelha-arm64.apk"
 private const val MAX_APK = 250L * 1024 * 1024
 private fun updateFile(context: Context) = File(File(context.cacheDir, "app-update"), APK_NAME)
@@ -57,16 +57,13 @@ private object UpdateNetwork {
         var url = URL(address)
         repeat(6) {
             require(url.protocol == "https" && url.port in listOf(-1, 443) && url.userInfo == null) { "Unsafe update redirect." }
-            require(url.host in setOf("api.github.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com")) { "Untrusted update host." }
+            require(url.host in setOf("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com")) { "Untrusted update host." }
             val c = url.openConnection() as HttpsURLConnection
             c.instanceFollowRedirects = false
             c.connectTimeout = 15000
             c.readTimeout = 25000
             c.setRequestProperty("Accept", accept)
             c.setRequestProperty("User-Agent", "Nazzelha-Android-Updater")
-            if (url.host == "api.github.com") {
-                c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-            }
             val status = c.responseCode
             if (status == 200) return c
             val location = c.getHeaderField("Location")
@@ -75,7 +72,7 @@ private object UpdateNetwork {
                 url = URL(url, location)
             } else {
                 throw UpdateHttpError(status, when (status) {
-                    403, 429 -> "GitHub update checks are temporarily rate limited. Try again later."
+                    403, 429 -> "GitHub temporarily refused the update request. Try again later."
                     404 -> "The requested update file is not available."
                     else -> "Update server returned HTTP " + status
                 })
@@ -99,35 +96,21 @@ private object UpdateNetwork {
             }
         } finally { conn.disconnect() }
     }
-    private fun downloadUrl(asset: JSONObject, name: String): String {
-        val address = asset.getString("browser_download_url")
-        val url = URL(address)
-        require(url.protocol == "https" && url.host == "github.com" && url.port in listOf(-1, 443) &&
-            url.userInfo == null && url.path.startsWith("/" + UPDATE_REPO + "/releases/download/") &&
-            url.path.substringAfterLast('/') == name && url.query == null && url.ref == null) { "Untrusted release asset URL." }
-        return address
-    }
     fun latest(current: Long): UpdateRelease? {
-        val release = try { json(UPDATE_API + "/releases/latest", "application/vnd.github+json") }
+        val meta = try { json(RELEASE_BASE + "/latest/download/update.json", "application/octet-stream") }
         catch (e: UpdateHttpError) { if (e.status == 404) return null else throw e }
-        check(!release.optBoolean("draft") && !release.optBoolean("prerelease")) { "Release is not a stable version." }
-        val assets = release.getJSONArray("assets")
-        fun asset(name: String): JSONObject {
-            return (0 until assets.length()).map { assets.getJSONObject(it) }.singleOrNull { it.optString("name") == name }
-                ?: error("Tested release is missing " + name)
-        }
-        val meta = json(downloadUrl(asset("update.json"), "update.json"), "application/octet-stream")
         check(meta.getString("packageName") == "com.clipshelf.app") { "Incorrect update package." }
         val code = meta.getLong("versionCode")
         check(code > 0) { "Invalid update version." }
         if (code <= current) return null
-        val apk = asset(APK_NAME)
+        val name = meta.getString("versionName")
+        check(name.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+"))) { "Invalid release version." }
         val bytes = meta.getLong("size")
         val hash = meta.getString("sha256").lowercase()
-        check(bytes in 1..MAX_APK && bytes == apk.getLong("size") && hash.matches(Regex("[0-9a-f]{64}"))) { "Invalid APK metadata." }
-        val digest = apk.optString("digest", "")
-        if (digest.startsWith("sha256:")) check(digest.removePrefix("sha256:").equals(hash, true)) { "Update metadata digest mismatch." }
-        return UpdateRelease(code, meta.getString("versionName"), release.optString("body").take(1500), downloadUrl(apk, APK_NAME), bytes, hash)
+        check(bytes in 1..MAX_APK && hash.matches(Regex("[0-9a-f]{64}"))) { "Invalid APK metadata." }
+        // Pin the APK to the manifest version, not the mutable latest alias.
+        val address = RELEASE_BASE + "/download/v" + name + "/" + APK_NAME
+        return UpdateRelease(code, name, meta.optString("releaseNotes", "A new tested version is available.").take(1500), address, bytes, hash)
     }
 
     @Suppress("DEPRECATION")
