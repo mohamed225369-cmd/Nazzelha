@@ -9,6 +9,7 @@ on:
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradle.properties'
+      - '.github/workflows/android.yml'
 permissions:
   contents: read
 jobs:
@@ -34,8 +35,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Use runner Android SDK
+        shell: bash
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          if [ ! -f "$SDK/platforms/android-35/android.jar" ] || [ ! -x "$SDK/build-tools/35.0.0/aapt2" ]; then
+            MANAGER=$(find "$SDK/cmdline-tools" -path '*/bin/sdkmanager' | sort -V | tail -1)
+            test -x "$MANAGER"
+            "$MANAGER" --sdk_root="$SDK" 'platforms;android-35' 'build-tools;35.0.0'
+          fi
+          test -f "$SDK/platforms/android-35/android.jar"
+          test -x "$SDK/build-tools/35.0.0/aapt2"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
