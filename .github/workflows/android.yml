@@ -1,0 +1,49 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Nazzelha_v0.5_Android_Source.zip'
+      - 'app/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate Android project
+        id: project
+        shell: bash
+        run: |
+          if [ -f settings.gradle.kts ] && [ -d app ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          elif [ -f Nazzelha_v0.5_Android_Source.zip ]; then
+            unzip -q Nazzelha_v0.5_Android_Source.zip -d _source
+            test -f _source/Nazzelha_v05/settings.gradle.kts
+            echo "dir=_source/Nazzelha_v05" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upload the Nazzelha v0.5 source project or ZIP to the repository first."
+            exit 1
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Assemble debug APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: gradle :app:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nazzelha-arm64-debug
+          path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
