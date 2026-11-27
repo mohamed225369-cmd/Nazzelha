@@ -70,6 +70,8 @@ jobs:
         run: python3 ci/install-engine.py "${{ steps.project.outputs.dir }}"
       - name: Install Ink and Coral design system
         run: python3 ci/install-brand.py "${{ steps.project.outputs.dir }}"
+      - name: Apply approved reference layout
+        run: python3 ci/install-reference-ui.py "${{ steps.project.outputs.dir }}"
       - name: Test recovery, unified progress and assemble APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace

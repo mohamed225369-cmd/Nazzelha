@@ -69,66 +69,58 @@ PY
   return 1
 }
 
-ui 'Load link' assert
+ui 'تحميل' assert
 adb shell pidof "$PACKAGE" | tee "$OUT/startup-pid.txt"
 grep -Eq '[0-9]' "$OUT/startup-pid.txt"
+ui 'فيديو + صوت' assert
+ui 'فيديو' assert
+ui 'صوت' assert
 adb exec-out screencap -p > "$OUT/home.png"
-ui 'Settings' tap
-ui 'App updates' tap
-ui 'Check for updates' assert
-ui 'Check for updates' tap
-ui 'No newer published version is available.' assert
+ui 'الإعدادات' tap
+ui 'تحديثات التطبيق' tap
+ui 'البحث عن تحديث' tap
+ui 'التطبيق محدّث' assert
 adb exec-out screencap -p > "$OUT/update-check.png"
-ui 'OK' tap
-ui 'Load link' assert
+ui 'تم' tap
+ui 'محرك التحميل' assert
 if [[ "$TEST_ABI" == x86_64 ]]; then
-  ui 'Settings' tap
-  ui 'Download engine' tap
-  ui 'Download engine' assert
-  ui '^Version: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
+  ui 'محرك التحميل' tap
+  ui '^الإصدار: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
   adb exec-out screencap -p > "$OUT/engine-version.png"
-  ui 'Update now' tap
-  ui '^(Previous version:|Installed version:)' regex 48
-  adb exec-out screencap -p > "$OUT/engine-updated.png"
+  ui 'تحديث الآن' tap
+  ui '^(الإصدار السابق:|الإصدار الحالي:)' regex 48
   cp "$OUT/ui.xml" "$OUT/engine-result.xml"
-  ui 'OK' tap
-  ui 'Load link' assert
-  ui 'Settings' tap
-  ui 'Download engine' tap
-  ui '^Version: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
-  cp "$OUT/ui.xml" "$OUT/engine-recheck.xml"
-  ui 'Close' tap
-  ui 'Load link' assert
-  echo "PASS: native x86_64 yt-dlp version, official stable update check/install and post-update version check."
-else
-  # The public APK is ARM64; x86 Android native-bridge cannot execute its
-  # child-process Python/FFmpeg binaries reliably. Native engine tests run
-  # on the separately built x86_64 APK from identical Kotlin source.
-  ui 'Settings' tap
-  ui 'Download engine' assert
-  adb shell input keyevent KEYCODE_BACK
-  ui 'Load link' assert
-  echo "ARM64 exact-APK installation/UI test; engine execution verified in native x86_64 job, not via translation."
+  ui 'تم' tap
+  ui 'محرك التحميل' tap
+  ui '^الإصدار: [0-9]{4}\.[0-9]{2}\.[0-9]{2}' regex
+  ui 'إغلاق' tap
+  echo "PASS: native engine version and update."
 fi
-ui 'Downloads' tap
-ui 'Nothing queued yet.' assert
+adb exec-out screencap -p > "$OUT/settings.png"
+ui 'الملفات' tap
+ui 'لا توجد ملفات محفوظة' assert
+adb exec-out screencap -p > "$OUT/files.png"
+ui 'التحميلات' tap
+ui 'لا توجد تحميلات' assert
 adb exec-out screencap -p > "$OUT/downloads.png"
-ui 'Back to library' tap
-ui 'Load link' assert
-ui 'Settings' tap
-ui 'Appearance · System' tap
-ui 'Light' tap
-ui 'Load link' assert
+ui 'الإعدادات' tap
+ui 'المظهر' tap
+ui 'فاتح' tap
+ui 'تحديثات التطبيق' assert
+ui 'الرئيسية' tap
+ui 'تحميل' assert
 adb exec-out screencap -p > "$OUT/light.png"
-ui 'Settings' tap
-ui 'Appearance · Light' tap
-ui 'Dark' tap
-ui 'Load link' assert
+ui 'الإعدادات' tap
+ui 'المظهر' tap
+ui 'داكن' tap
+ui 'تحديثات التطبيق' assert
+ui 'الرئيسية' tap
+ui 'تحميل' assert
 adb exec-out screencap -p > "$OUT/dark.png"
 adb shell am force-stop "$PACKAGE"
 adb shell am start -W -n "$PACKAGE/.MainActivity" | tee "$OUT/relaunch.txt"
 grep -Eq '^Status:[[:space:]]+ok' "$OUT/relaunch.txt"
-ui 'Load link' assert
+ui 'تحميل' assert
 adb exec-out screencap -p > "$OUT/relaunch.png"
 adb shell pidof "$PACKAGE" | tee "$OUT/pid.txt"
 grep -Eq '[0-9]' "$OUT/pid.txt"
