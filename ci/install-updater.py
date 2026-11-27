@@ -14,9 +14,6 @@ def replace(path, old, new):
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 updater = (here / "overlays/AppUpdater.kt").read_text(encoding="utf-8")
-updater = updater.replace('        val configured = store.token() != null\n', '')
-updater = updater.replace('setTitle("App updates")\n            .setMessage("Installed version: " + versionLabel() + "\\nUpdate channel: private GitHub releases")', 'setTitle("App updates · " + versionLabel())')
-updater = updater.replace('val conn = connection(UPDATE_API + "/releases/assets/" + release.asset, token, "application/octet-stream")\n        try {', 'val conn = try { connection(UPDATE_API + "/releases/assets/" + release.asset, token, "application/octet-stream") } catch (e: Exception) { part.delete(); throw e }\n        try {')
 (java / "AppUpdater.kt").write_text(updater, encoding="utf-8")
 main = java / "MainActivity.kt"
 replace(main, '    private val prefs by lazy { getSharedPreferences("appearance", MODE_PRIVATE) }',
@@ -34,6 +31,6 @@ replace(manifest, '    <uses-permission android:name="android.permission.INTERNE
 replace(manifest, '        <service android:name=".DownloadService"',
     '        <provider android:name=".UpdateApkProvider" android:authorities="com.clipshelf.app.updates" android:exported="false" android:grantUriPermissions="true" />\n        <service android:name=".DownloadService"')
 gradle = project / "app/build.gradle.kts"
-replace(gradle, 'versionCode = 6', 'versionCode = 7')
-replace(gradle, 'versionName = "0.5.1"', 'versionName = "0.5.2"')
-print("Installed app updater overlay for 0.5.2")
+replace(gradle, 'versionCode = 6', 'versionCode = 8')
+replace(gradle, 'versionName = "0.5.1"', 'versionName = "0.5.3"')
+print("Installed app updater overlay for 0.5.3")

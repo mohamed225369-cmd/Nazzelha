@@ -149,10 +149,10 @@ jobs:
           target: ${{ matrix.target }}
           arch: x86_64
           profile: pixel_5
-          ram-size: 3072M
+          ram-size: 4096M
           disk-size: 4096M
           emulator-boot-timeout: 600
-          emulator-options: -no-window -no-snapshot -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -cores 2 -no-window -no-snapshot -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
           script: bash ci/apk-smoke.sh candidate/app-debug.apk diagnostics ${{ matrix.expected_page_size }}
       - name: Upload diagnostic logs and screenshots
@@ -191,7 +191,7 @@ jobs:
         with:
           name: Nazzelha-arm64-debug-tested
           path: release
-      - name: Publish signed and tested private release
+      - name: Publish signed and tested public release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

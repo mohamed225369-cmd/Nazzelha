@@ -41,7 +41,7 @@ grep -Eq '^Status:[[:space:]]+ok' "$OUT/launch.txt"
 
 ui() {
   local label="$1" action="$2"
-  for attempt in 1 2 3 4 5; do
+  for attempt in $(seq 1 12); do
     if adb shell uiautomator dump /sdcard/nazzelha-ui.xml >/dev/null 2>&1 &&
        adb pull /sdcard/nazzelha-ui.xml "$OUT/ui.xml" >/dev/null 2>&1; then
       if python3 - "$OUT/ui.xml" "$label" "$action" <<'PY'
@@ -71,9 +71,9 @@ ui 'Settings' tap
 ui 'App updates' tap
 ui 'Check for updates' assert
 ui 'Check for updates' tap
-ui 'Private update access' assert
-adb exec-out screencap -p > "$OUT/update-access.png"
-adb shell input keyevent KEYCODE_BACK
+ui 'No newer published version is available.' assert
+adb exec-out screencap -p > "$OUT/update-check.png"
+ui 'OK' tap
 ui 'Load link' assert
 ui 'Downloads' tap
 ui 'Nothing queued yet.' assert

@@ -14,12 +14,6 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.provider.Settings
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.text.InputType
-import android.util.Base64
-import android.widget.EditText
-import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -28,12 +22,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
-import java.security.KeyStore
 import java.security.MessageDigest
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -41,54 +30,34 @@ private const val UPDATE_REPO = "mohamed225369-cmd/Nazzelha"
 private const val UPDATE_API = "https://api.github.com/repos/" + UPDATE_REPO
 private const val APK_NAME = "Nazzelha-arm64.apk"
 private const val MAX_APK = 250L * 1024 * 1024
-private const val KEY_ALIAS = "nazzelha.update.token.v1"
 private fun updateFile(context: Context) = File(File(context.cacheDir, "app-update"), APK_NAME)
 private fun shaHex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it.toInt() and 255) }
 
-private class UpdateCredentials(context: Context) {
+private class UpdatePreferences(context: Context) {
     private val prefs = context.getSharedPreferences("app_updates", Context.MODE_PRIVATE)
-    private fun key(): SecretKey {
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (ks.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256).build())
-        }.generateKey()
+    init {
+        // Remove legacy private-channel credentials, if previously configured.
+        if (prefs.contains("token")) {
+            prefs.edit().remove("token").apply()
+            runCatching { java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry("nazzelha.update.token.v1") }
+        }
     }
-    fun token(): String? {
-        val encrypted = prefs.getString("token", null) ?: return null
-        return runCatching {
-            val parts = encrypted.split(":")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP)))
-            String(cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)), Charsets.UTF_8)
-        }.getOrNull()
-    }
-    fun save(token: String, auto: Boolean) {
-        require(token.length in 15..500 && token.none { it.isWhitespace() }) { "Enter a valid read-only GitHub token." }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        val encoded = Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" +
-            Base64.encodeToString(cipher.doFinal(token.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
-        check(prefs.edit().putString("token", encoded).putBoolean("auto", auto).putLong("last", 0).commit()) { "Could not save update access." }
-    }
-    fun clear() {
-        prefs.edit().remove("token").remove("last").remove("auto").apply()
-    }
-    fun autoDue() = prefs.getBoolean("auto", false) && System.currentTimeMillis() - prefs.getLong("last", 0) >= 24L * 60 * 60 * 1000
+    fun automatic() = prefs.getBoolean("auto", false)
+    fun toggle() { prefs.edit().putBoolean("auto", !automatic()).putLong("last", 0).apply() }
+    fun autoDue() = automatic() && System.currentTimeMillis() - prefs.getLong("last", 0) >= 24L * 60 * 60 * 1000
     fun markChecked() { prefs.edit().putLong("last", System.currentTimeMillis()).apply() }
 }
 
-private data class UpdateRelease(val code: Long, val name: String, val notes: String, val asset: Long, val bytes: Long, val hash: String)
+private class UpdateHttpError(val status: Int, message: String) : java.io.IOException(message)
+
+private data class UpdateRelease(val code: Long, val name: String, val notes: String, val asset: String, val bytes: Long, val hash: String)
 
 private object UpdateNetwork {
-    private fun connection(address: String, token: String, accept: String): HttpsURLConnection {
+    private fun connection(address: String, accept: String): HttpsURLConnection {
         var url = URL(address)
         repeat(6) {
             require(url.protocol == "https" && url.port in listOf(-1, 443) && url.userInfo == null) { "Unsafe update redirect." }
-            require(url.host in setOf("api.github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com")) { "Untrusted update host." }
+            require(url.host in setOf("api.github.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com")) { "Untrusted update host." }
             val c = url.openConnection() as HttpsURLConnection
             c.instanceFollowRedirects = false
             c.connectTimeout = 15000
@@ -96,7 +65,6 @@ private object UpdateNetwork {
             c.setRequestProperty("Accept", accept)
             c.setRequestProperty("User-Agent", "Nazzelha-Android-Updater")
             if (url.host == "api.github.com") {
-                c.setRequestProperty("Authorization", "Bearer " + token)
                 c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
             }
             val status = c.responseCode
@@ -106,17 +74,17 @@ private object UpdateNetwork {
             if (status in setOf(301, 302, 303, 307, 308) && location != null) {
                 url = URL(url, location)
             } else {
-                error(when (status) {
-                    401, 403 -> "Update access denied. Check your GitHub read-only token."
-                    404 -> "No accessible tested release yet, or update access is not configured."
+                throw UpdateHttpError(status, when (status) {
+                    403, 429 -> "GitHub update checks are temporarily rate limited. Try again later."
+                    404 -> "The requested update file is not available."
                     else -> "Update server returned HTTP " + status
                 })
             }
         }
         error("Too many update redirects.")
     }
-    private fun json(address: String, token: String, accept: String): JSONObject {
-        val conn = connection(address, token, accept)
+    private fun json(address: String, accept: String): JSONObject {
+        val conn = connection(address, accept)
         try {
             return conn.inputStream.use { input ->
                 val out = java.io.ByteArrayOutputStream()
@@ -131,15 +99,24 @@ private object UpdateNetwork {
             }
         } finally { conn.disconnect() }
     }
-    fun latest(token: String, current: Long): UpdateRelease? {
-        val release = json(UPDATE_API + "/releases/latest", token, "application/vnd.github+json")
+    private fun downloadUrl(asset: JSONObject, name: String): String {
+        val address = asset.getString("browser_download_url")
+        val url = URL(address)
+        require(url.protocol == "https" && url.host == "github.com" && url.port in listOf(-1, 443) &&
+            url.userInfo == null && url.path.startsWith("/" + UPDATE_REPO + "/releases/download/") &&
+            url.path.substringAfterLast('/') == name && url.query == null && url.ref == null) { "Untrusted release asset URL." }
+        return address
+    }
+    fun latest(current: Long): UpdateRelease? {
+        val release = try { json(UPDATE_API + "/releases/latest", "application/vnd.github+json") }
+        catch (e: UpdateHttpError) { if (e.status == 404) return null else throw e }
         check(!release.optBoolean("draft") && !release.optBoolean("prerelease")) { "Release is not a stable version." }
         val assets = release.getJSONArray("assets")
         fun asset(name: String): JSONObject {
             return (0 until assets.length()).map { assets.getJSONObject(it) }.singleOrNull { it.optString("name") == name }
                 ?: error("Tested release is missing " + name)
         }
-        val meta = json(UPDATE_API + "/releases/assets/" + asset("update.json").getLong("id"), token, "application/octet-stream")
+        val meta = json(downloadUrl(asset("update.json"), "update.json"), "application/octet-stream")
         check(meta.getString("packageName") == "com.clipshelf.app") { "Incorrect update package." }
         val code = meta.getLong("versionCode")
         check(code > 0) { "Invalid update version." }
@@ -150,15 +127,15 @@ private object UpdateNetwork {
         check(bytes in 1..MAX_APK && bytes == apk.getLong("size") && hash.matches(Regex("[0-9a-f]{64}"))) { "Invalid APK metadata." }
         val digest = apk.optString("digest", "")
         if (digest.startsWith("sha256:")) check(digest.removePrefix("sha256:").equals(hash, true)) { "Update metadata digest mismatch." }
-        return UpdateRelease(code, meta.getString("versionName"), release.optString("body").take(1500), apk.getLong("id"), bytes, hash)
+        return UpdateRelease(code, meta.getString("versionName"), release.optString("body").take(1500), downloadUrl(apk, APK_NAME), bytes, hash)
     }
 
     @Suppress("DEPRECATION")
-    fun download(context: Context, release: UpdateRelease, token: String, cancelled: AtomicBoolean, progress: (Int) -> Unit): File {
+    fun download(context: Context, release: UpdateRelease, cancelled: AtomicBoolean, progress: (Int) -> Unit): File {
         val finalFile = updateFile(context)
         check(finalFile.parentFile!!.mkdirs() || finalFile.parentFile!!.isDirectory) { "Cannot create update folder." }
         val part = File.createTempFile("download-", ".apk", finalFile.parentFile)
-        val conn = connection(UPDATE_API + "/releases/assets/" + release.asset, token, "application/octet-stream")
+        val conn = try { connection(release.asset, "application/octet-stream") } catch (e: Exception) { part.delete(); throw e }
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var count = 0L
@@ -222,7 +199,7 @@ class UpdateApkProvider : ContentProvider() {
 }
 
 class AppUpdateUi(private val activity: Activity) {
-    private val store = UpdateCredentials(activity)
+    private val store = UpdatePreferences(activity)
     private val work = Executors.newSingleThreadExecutor()
     private var busy = false
     private var closed = false
@@ -234,22 +211,19 @@ class AppUpdateUi(private val activity: Activity) {
     private fun version() = activity.packageManager.getPackageInfo(activity.packageName, 0)
     fun versionLabel() = version().versionName ?: "Unknown"
     fun autoCheck() {
-        if (store.autoDue() && store.token() != null) checkUpdates(false)
+        if (store.autoDue()) checkUpdates(false)
     }
     fun close() {
         closed = true; cancel.set(true); dialog?.dismiss(); work.shutdownNow()
     }
     fun settings() {
-        if (busy) return
-        val configured = store.token() != null
-        AlertDialog.Builder(activity).setTitle("App updates")
-            .setMessage("Installed version: " + versionLabel() + "\nUpdate channel: private GitHub releases")
-            .setItems(arrayOf("Check for updates", "Configure private update access", "Open releases in browser", "Forget update access")) { _, i ->
+        if (busy) { notice("An update check or download is already in progress."); return }
+        AlertDialog.Builder(activity).setTitle("App updates · " + versionLabel())
+            .setItems(arrayOf("Check for updates", "Automatic checks · " + if (store.automatic()) "On" else "Off", "Open releases in browser")) { _, i ->
                 when (i) {
                     0 -> checkUpdates(true)
-                    1 -> configure()
+                    1 -> { store.toggle(); settings() }
                     2 -> browse()
-                    3 -> { store.clear(); Toast.makeText(activity, "Update access removed.", Toast.LENGTH_SHORT).show() }
                 }
             }.setNegativeButton("Close", null).show()
     }
@@ -260,45 +234,26 @@ class AppUpdateUi(private val activity: Activity) {
     private fun notice(text: String) {
         if (alive()) AlertDialog.Builder(activity).setTitle("App updates").setMessage(text).setPositiveButton("OK", null).show()
     }
-    private fun configure() {
-        val input = EditText(activity).apply {
-            hint = "GitHub read-only token"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true); importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
-        }
-        val auto = CheckBox(activity).apply { text = "Check daily when opening the app"; isChecked = true }
-        val wrap = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            val p = (20 * resources.displayMetrics.density).toInt()
-            setPadding(p, 0, p, 0); addView(input); addView(auto)
-        }
-        AlertDialog.Builder(activity).setTitle("Private update access")
-            .setMessage("Use a fine-grained GitHub token with Contents: read-only for Nazzelha. It stays encrypted on this device. Never share it in chat.")
-            .setView(wrap).setNegativeButton("Cancel", null).setPositiveButton("Save") { _, _ ->
-                runCatching { store.save(input.text.toString().trim(), auto.isChecked) }
-                    .onSuccess { checkUpdates(true) }.onFailure { notice("Could not save update access. Check the token and try again.") }
-            }.show()
-    }
     fun checkUpdates(manual: Boolean) {
         if (busy || !alive()) return
-        val token = store.token() ?: run { if (manual) configure(); return }
         val current = version().longVersionCode
         busy = true; store.markChecked()
         if (manual) dialog = AlertDialog.Builder(activity).setTitle("Checking for updates…")
             .setView(ProgressBar(activity)).setCancelable(false).create().apply { show() }
         work.execute {
-            val result = runCatching { UpdateNetwork.latest(token, current) }
+            val result = runCatching { UpdateNetwork.latest(current) }
             main {
                 busy = false; dialog?.dismiss(); dialog = null
                 result.onSuccess { release ->
-                    if (release == null) { if (manual) notice("You're using the latest version.") }
+                    if (release == null) { if (manual) notice("No newer published version is available.") }
                     else AlertDialog.Builder(activity).setTitle("Update available · " + release.name)
                         .setMessage("Download: " + "%.1f".format(release.bytes / (1024.0 * 1024)) + " MB\n\n" + release.notes)
-                        .setNegativeButton("Later", null).setPositiveButton("Download") { _, _ -> download(release, token) }.show()
+                        .setNegativeButton("Later", null).setPositiveButton("Download") { _, _ -> download(release) }.show()
                 }.onFailure { if (manual) notice(it.message?.take(240) ?: "Could not check for updates.") }
             }
         }
     }
-    private fun download(release: UpdateRelease, token: String) {
+    private fun download(release: UpdateRelease) {
         if (busy || !alive()) return
         busy = true; cancel = AtomicBoolean(false)
         val signal = cancel
@@ -312,7 +267,7 @@ class AppUpdateUi(private val activity: Activity) {
         dialog = AlertDialog.Builder(activity).setTitle("Downloading " + release.name).setView(view)
             .setCancelable(false).setNegativeButton("Cancel") { _, _ -> signal.set(true) }.create().apply { show() }
         work.execute {
-            val result = runCatching { UpdateNetwork.download(activity.applicationContext, release, token, signal) { p ->
+            val result = runCatching { UpdateNetwork.download(activity.applicationContext, release, signal) { p ->
                 main { progress.progress = p; label.text = "Downloading update · " + p + "%" }
             } }
             main {
