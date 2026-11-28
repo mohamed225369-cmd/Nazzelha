@@ -15,7 +15,7 @@ s=g.read_text()
 s=edit(s,'    compileOptions {','''    buildTypes {
         getByName("debug") {
             isMinifyEnabled = true
-            isShrinkResources = true
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-nazzelha.pro")
         }
     }
@@ -24,6 +24,8 @@ g.write_text(s)
 (project/"app/proguard-nazzelha.pro").write_text('''# Preserve the application's entry points and native media wrappers.
 -keep class com.clipshelf.app.** { *; }
 -keep class com.yausername.** { *; }
+-keep class net.lingala.zip4j.** { *; }
+-dontoptimize
 -keepclasseswithmembers,includedescriptorclasses class * { native <methods>; }
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 ''')
@@ -56,6 +58,8 @@ s=edit(s,'        if (clip.streams.isNotEmpty()) return clip\n        init(conte
 s=edit(s,'        return info.copy(index = clip.index, url = clip.url, duration = info.duration.takeIf { it > 0 } ?: clip.duration, thumbnail = clip.thumbnail.ifBlank { info.thumbnail })',
     '''        return info.copy(index=clip.index,url=clip.url,duration=info.duration.takeIf{it>0}?:clip.duration,
             thumbnail=clip.thumbnail.ifBlank{info.thumbnail}).also{formatCache.put(it)}''')
+s=edit(s,'return locked(false) { EngineMaintenance.version() }',
+    'return try { locked(false) { EngineMaintenance.version() } } catch (e: Exception) { android.util.Log.e("NazzelhaEngine","Engine version check failed",e); throw e }')
 p.write_text(s)
 p=java/"MainActivity.kt"
 s=p.read_text()

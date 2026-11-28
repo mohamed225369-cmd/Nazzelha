@@ -8,7 +8,7 @@ with zipfile.ZipFile(apk) as z:
     for name in ("libffmpeg.zip.so","libpython.zip.so","libffmpeg.so","libffprobe.so","libpython.so","libqjs.so"):
         path="lib/arm64-v8a/"+name
         assert path in files and files[path].file_size>0, "Missing engine payload: "+path
-    assert any(n.startswith("res/") and "ytdlp" in n for n in files), "Missing bundled yt-dlp"
+    assert any(n.startswith("res/") and "ytdlp" in n and i.file_size >= 1_000_000 for n,i in files.items()), "Missing or truncated bundled yt-dlp"
     groups=defaultdict(int)
     for i in files.values():
         key="dex" if i.filename.startswith("classes") and i.filename.endswith(".dex") else i.filename.split("/")[0]
