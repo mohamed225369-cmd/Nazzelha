@@ -14,7 +14,7 @@ g=project/"app/build.gradle.kts"
 s=g.read_text()
 s=edit(s,'    compileOptions {','''    buildTypes {
         getByName("debug") {
-            isMinifyEnabled = true
+            isMinifyEnabled = providers.gradleProperty("nazzelhaExperimentalShrink").orNull == "true"
             isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-nazzelha.pro")
         }
@@ -58,8 +58,31 @@ s=edit(s,'        if (clip.streams.isNotEmpty()) return clip\n        init(conte
 s=edit(s,'        return info.copy(index = clip.index, url = clip.url, duration = info.duration.takeIf { it > 0 } ?: clip.duration, thumbnail = clip.thumbnail.ifBlank { info.thumbnail })',
     '''        return info.copy(index=clip.index,url=clip.url,duration=info.duration.takeIf{it>0}?:clip.duration,
             thumbnail=clip.thumbnail.ifBlank{info.thumbnail}).also{formatCache.put(it)}''')
-s=edit(s,'return locked(false) { EngineMaintenance.version() }',
-    'return try { locked(false) { EngineMaintenance.version() } } catch (e: Exception) { android.util.Log.e("NazzelhaEngine","Engine version check failed",e); throw e }')
+s=edit(s,'''    fun version(context: Context): String {
+        init(context)
+        return locked(false) { EngineMaintenance.version() }
+    }''', '''    fun version(context: Context): String = try {
+        init(context)
+        locked(false) { EngineMaintenance.version() }
+    } catch (e: Throwable) {
+        android.util.Log.e("NazzelhaEngine","Engine initialization or version check failed",e)
+        throw e
+    }''')
+s=edit(s,'''        EngineMaintenance.recover(context.applicationContext)
+        YoutubeDL.init(context.applicationContext)
+        FFmpeg.init(context.applicationContext)
+        initialized = true''', '''        try {
+            EngineMaintenance.recover(context.applicationContext)
+            android.util.Log.i("NazzelhaEngine","Initializing extractor")
+            YoutubeDL.init(context.applicationContext)
+            android.util.Log.i("NazzelhaEngine","Initializing media processor")
+            FFmpeg.init(context.applicationContext)
+            initialized = true
+            android.util.Log.i("NazzelhaEngine","Media engine initialized")
+        } catch(e: Throwable) {
+            android.util.Log.e("NazzelhaEngine","Media engine initialization failed",e)
+            throw e
+        }''')
 p.write_text(s)
 p=java/"MainActivity.kt"
 s=p.read_text()

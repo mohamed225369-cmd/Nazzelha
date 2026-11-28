@@ -85,6 +85,7 @@ PY
     sleep 2
   done
   echo "UI element not found: $label"
+  adb logcat -d -s NazzelhaEngine:V AndroidRuntime:E || true
   return 1
 }
 
