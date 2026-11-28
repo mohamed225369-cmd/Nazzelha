@@ -2,7 +2,7 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, multi-platform]
     paths:
       - 'Nazzelha_v0.5_Android_Source.zip'
       - 'app/**'
@@ -76,6 +76,8 @@ jobs:
         run: python3 ci/install-polish.py "${{ steps.project.outputs.dir }}"
       - name: Apply size and metadata optimization
         run: python3 ci/install-v058.py "${{ steps.project.outputs.dir }}"
+      - name: Install multi-platform link and media support
+        run: python3 ci/install-v059.py "${{ steps.project.outputs.dir }}"
       - name: Test recovery, unified progress and assemble APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
