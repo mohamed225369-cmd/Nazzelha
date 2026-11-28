@@ -38,11 +38,11 @@ s=edit(s,'    fun fetch(context: Context, url: String, playlist: Boolean): Colle
         FormatCache.directId''')
 s=edit(s,'        val url = Rules.youtubeLink(o.string("webpage_url", "")) ?: Rules.youtubeLink(o.string("url", "")) ?: Rules.youtubeLink(originalUrl)\n            ?: if (id.matches(Regex("[A-Za-z0-9_-]{11}"))) "https://www.youtube.com/watch?v=$id" else ""',
     '''        val original=PlatformLinks.resolve(originalUrl)
-        val candidates=listOf(o.string("webpage_url",""),o.string("url","")).mapNotNull(PlatformLinks::resolve)
+        val linkCandidates=listOf(o.string("webpage_url",""),o.string("url","")).mapNotNull(PlatformLinks::resolve)
         val platform=original?.platform ?: MediaPlatform.YOUTUBE
         // Preserve the public post URL for social media, never use signed media URLs.
         val url=if(platform!=MediaPlatform.YOUTUBE)original?.url.orEmpty()
-            else candidates.firstOrNull{it.platform==MediaPlatform.YOUTUBE}?.url
+            else linkCandidates.firstOrNull{it.platform==MediaPlatform.YOUTUBE}?.url
                 ?: original?.url ?: if(FormatCache.validId(id))"https://www.youtube.com/watch?v=$id" else ""''')
 s=edit(s,'        val thumb = ThumbnailRules.pick(id, candidates, o.string("thumbnail", ""))',
     '''        val thumb = if(platform==MediaPlatform.YOUTUBE) ThumbnailRules.pick(id, candidates, o.string("thumbnail",""))
