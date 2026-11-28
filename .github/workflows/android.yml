@@ -74,6 +74,8 @@ jobs:
         run: python3 ci/install-reference-ui.py "${{ steps.project.outputs.dir }}"
       - name: Polish reviewed screens, launcher and navigation
         run: python3 ci/install-polish.py "${{ steps.project.outputs.dir }}"
+      - name: Apply size and metadata optimization
+        run: python3 ci/install-v058.py "${{ steps.project.outputs.dir }}"
       - name: Test recovery, unified progress and assemble APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
@@ -114,6 +116,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-info.txt
           grep -q "package: name='com.clipshelf.app'" apk-info.txt
           grep -q "native-code: 'arm64-v8a'$" apk-info.txt
+      - name: Audit APK size and engine payload
+        run: python3 ci/audit-apk-size.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk"
       - name: Generate update manifest from actual APK
         run: python3 ci/update-manifest.py "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" "$ANDROID_HOME/build-tools/35.0.0/aapt" "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - name: Prepare and verify small updates from published signed APKs

@@ -1,7 +1,10 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
-    <path android:pathData="M7,11 C7,4 13,1 19,4 L40,16 C47,20 48,28 41,32 L19,44 C13,48 7,44 7,37 Z">
-        <aapt:attr name="android:fillColor"><gradient android:startX="7" android:startY="3" android:endX="38" android:endY="44" android:startColor="#FFA090" android:centerColor="#FF8075" android:endColor="#F65D56" android:type="linear"/></aapt:attr>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="48dp" android:height="48dp" android:viewportWidth="880" android:viewportHeight="880">
+    <group android:translateX="-184" android:translateY="-176">
+    <path android:pathData="M383,435 C400,421 425,429 425,454 L423,620 C423,729 514,819 624,819 C737,819 828,729 828,615 L828,477 C828,445 864,433 886,456 C947,511 981,590 981,673 C981,862 822,1013 624,1013 C426,1013 267,861 267,674 C267,578 309,496 383,435 Z">
+        <aapt:attr name="android:fillColor"><gradient android:startX="300" android:startY="430" android:endX="850" android:endY="1000" android:startColor="#FF806F" android:centerColor="#FF6F61" android:endColor="#FF5D54" android:type="linear"/></aapt:attr>
     </path>
-    <path android:pathData="M7.7,11 C7.7,4.7 13.5,1.8 19,4.7 L40,16.7 C43,18.4 45.2,21 45.4,24" android:strokeColor="#FFD2C8" android:strokeAlpha="0.55" android:strokeWidth="0.8" android:strokeLineCap="round" android:fillColor="#00000000"/>
-    <path android:fillColor="#10171D" android:pathData="M16,33.8 L16,15.6 C16,12.9 19.2,11.5 21.1,13.5 L30,22.6 L30,15 C30,11.9 35.2,11.5 35.2,15 L35.2,26.8 C35.2,30.5 31.5,31.9 28.9,29.5 L21.2,22 L21.2,32 C21.2,33.4 20.2,34.1 16,35.5 Z"/>
+    <path android:pathData="M490,291 C490,237 546,201 595,230 L791,358 C838,388 838,444 792,475 L589,609 C545,638 490,604 490,550 Z">
+        <aapt:attr name="android:fillColor"><gradient android:startX="500" android:startY="220" android:endX="760" android:endY="610" android:startColor="#FF8875" android:centerColor="#FF7465" android:endColor="#FF5D54" android:type="linear"/></aapt:attr>
+    </path>
+    </group>
 </vector>
