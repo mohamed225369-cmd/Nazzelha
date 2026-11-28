@@ -1,0 +1,17 @@
+'use strict';
+const REPO = 'mohamed225369-cmd/Nazzelha';
+const RELEASES = 'https://github.com/' + REPO + '/releases';
+const FALLBACK = Object.freeze({ tag:'v0.5.9', size:66155918, url:RELEASES+'/download/v0.5.9/Nazzelha-arm64.apk' });
+const API = 'https://api.github.com/repos/'+REPO+'/releases/latest';
+const $ = (s)=>document.querySelector(s);
+const $$ = (s)=>Array.from(document.querySelectorAll(s));
+let release=FALLBACK;
+function parts(v){return /^v?(\d+)\.(\d+)\.(\d+)$/.test(v||'') ? v.replace(/^v/,'').split('.').map(Number) : null;}
+function compare(a,b){const x=parts(a),y=parts(b);if(!x||!y)return null;for(let i=0;i<3;i++){if(x[i]!==y[i])return x[i]>y[i]?1:-1;}return 0;}
+function readStored(){try{return localStorage.getItem('nazzelha.last-requested-release');}catch{return null;}}
+function render(r,live){release=r;$$('[data-version]').forEach(el=>el.textContent=r.tag);$$('[data-size]').forEach(el=>el.textContent=(r.size/1e6).toFixed(1)+' MB');$$('[data-download]').forEach(el=>el.href=r.url);$$('[data-release]').forEach(el=>el.href=RELEASES+'/tag/'+encodeURIComponent(r.tag));const previous=readStored();const newer=compare(r.tag,previous);$('#update-banner').hidden=newer===0||newer===-1;$('#update-title').textContent=newer===1?'إصدار أحدث متاح للتحميل':'تحديث متاح للنسخ الأقدم';$('#release-status').textContent=live?'تم التحقق من أحدث إصدار على GitHub':'آخر إصدار معروف · تعذّر التحقق المباشر';}
+function validate(data){if(!data||data.draft||data.prerelease||!parts(data.tag_name))throw Error('Invalid release');const expected=RELEASES+'/download/'+data.tag_name+'/Nazzelha-arm64.apk';const a=data.assets?.find(x=>x.name==='Nazzelha-arm64.apk'&&x.browser_download_url===expected&&Number.isSafeInteger(x.size)&&x.size>0);if(!a)throw Error('Invalid APK asset');return{tag:data.tag_name,size:a.size,url:expected};}
+async function refresh(){const button=$('#refresh-release');button.disabled=true;$('#release-status').textContent='جاري التحقق من آخر إصدار…';const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),8000);try{const r=await fetch(API,{headers:{Accept:'application/vnd.github+json'},signal:controller.signal,cache:'no-store'});if(!r.ok)throw Error('GitHub unavailable');const latest=validate(await r.json());render(latest,true);}catch{render(release,false);}finally{clearTimeout(timer);button.disabled=false;}}
+$$('[data-download]').forEach(a=>a.addEventListener('click',()=>{try{localStorage.setItem('nazzelha.last-requested-release',release.tag);}catch{} }));
+$$('[data-theme]').forEach(b=>b.addEventListener('click',()=>{const theme=b.dataset.theme;$$('[data-theme]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));const img=$('#app-preview');img.src='assets/'+theme+'.webp';img.alt='لقطة حقيقية للشاشة الرئيسية في Nazzelha، الوضع '+(theme==='dark'?'الداكن':'الفاتح');}));
+const menu=$('.menu');const nav=$('#navigation');function closeMenu(){menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-label','فتح القائمة');nav.classList.remove('open');}menu.addEventListener('click',()=>{if(nav.classList.contains('open'))closeMenu();else{nav.classList.add('open');menu.setAttribute('aria-expanded','true');menu.setAttribute('aria-label','إغلاق القائمة');}});nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',closeMenu));document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();});$('#refresh-release').addEventListener('click',refresh);render(FALLBACK,false);refresh();
